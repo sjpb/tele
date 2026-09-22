@@ -35,20 +35,21 @@ This identity is used only to detect running or completed instances of the same 
 
 ## OPTIONS
 
-OPTIONS
-`--poll SECONDS`
-In normal (launch/reattach) mode: interval between checks of remote command status while blocking or reattached. Default: 30.
-In --kill mode: interval between checks of whether the signaled process has died. Default: 1.
-`--timeout SECONDS`
-In normal (launch/reattach) mode: maximum time tele will block waiting locally for the command to complete. Default: 0 (no timeout — block indefinitely). On expiry, tele exits with a distinct return code (see RETURN CODES) and leaves the remote command running, untouched — the same state --async would leave it in (see FUTURE WORK). No cleanup occurs; a later tele invocation with the same identity will reattach or collect the result as normal.
+`--poll SECONDS`  
+In normal (launch/reattach) mode: interval between checks of remote command status while blocking or reattached. Default: 30.  
+In `--kill` mode: interval between checks of whether the signaled process has died. Default: 1.
+
+`--timeout SECONDS`  
+In normal (launch/reattach) mode: maximum time tele will block waiting locally for the command to complete. Default: 0 (no timeout — block indefinitely). On expiry, tele exits with a distinct return code (see RETURN CODES) and leaves the remote command running, untouched — the same state --async would leave it in (see FUTURE WORK). No cleanup occurs; a later tele invocation with the same identity will reattach or collect the result as normal.  
 In --kill mode: maximum time to wait for the signaled process to die before giving up. Default: 5. On expiry, the process is left running (no escalation, e.g. to SIGKILL, is attempted) and remote state is left as-is (not cleaned up); tele exits with a distinct return code (see RETURN CODES) so the caller knows the kill did not take effect and may retry, e.g. with a stronger signal. --poll and --timeout share the same names and general purpose (periodic check, give-up bound) in both modes, but their meaning and defaults differ by mode: in launch mode they bound waiting for the remote command, in --kill mode they bound waiting for the signal to take effect.
-`--state-path PATH`
+
+`--state-path PATH`  
 Remote path under which lock, status, PID, and output files are stored, default `~/.tele`.
-`--kill [SIGNAL]`
-If a matching invocation (per IDENTITY) is currently running, send it SIGNAL (name or number, as accepted by kill(1); default matches kill's own default, SIGTERM), sent to the remote command's process group so that child processes are reached as well. tele then polls (per --poll) for the process to die, up to --timeout:
-If the process dies (whether from this signal or otherwise) within the timeout, remote state is cleaned up and tele exits 0 — the invocation is now fully gone and a subsequent tele with the same identity starts fresh.
-If the process is still alive when --timeout expires, no cleanup occurs and tele exits with a distinct return code (see RETURN CODES).
-If matching state exists but no process is running (already dead, unreported), it is cleaned up directly, no signal needed, exit 0. If no matching state exists at all, this is a silent no-op, exit 0. Repeated tele --kill calls against the same invocation are therefore safe.
+
+`--kill [SIGNAL]`  
+If a matching invocation (per IDENTITY) is currently running, send it SIGNAL (name or number, as accepted by `kill(1)`; default is SIGTERM as for `kill(1)`), sent to the remote command's process group so that child processes are reached as well. `tele` then polls (as per `--poll`) for the process to die, up to `--timeout`. If the process dies (whether from this signal or otherwise) within the timeout, remote state is cleaned up and `tele` exits 0. The invocation is now fully gone and a subsequent tele with the same identity starts fresh.  
+If the process is still alive when the timeout expires, no cleanup occurs and tele exits with a distinct return code (see RETURN CODES).  
+If matching state exists but no process is running (already dead, unreported), it is cleaned up directly, no signal needed, exit 0. If no matching state exists at all, this is a silent no-op, exit 0. Repeated `tele --kill` calls against the same invocation are therefore safe.
 
 # BEHAVIOR ON INVOCATION
 
