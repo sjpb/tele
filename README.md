@@ -41,17 +41,15 @@ In `--kill` mode: interval between checks of whether the signaled process has di
 
 `--timeout SECONDS`  
 In normal (launch/reattach) mode: maximum time tele will block waiting locally for the command to complete. Default: 0 (no timeout — block indefinitely). On expiry, tele exits with a distinct return code (see RETURN CODES) and leaves the remote command running, untouched — the same state --async would leave it in (see FUTURE WORK). No cleanup occurs; a later tele invocation with the same identity will reattach or collect the result as normal.  
-In --kill mode: maximum time to wait for the signaled process to die before giving up. Default: 5. On expiry, the process is left running (no escalation, e.g. to SIGKILL, is attempted) and remote state is left as-is (not cleaned up); tele exits with a distinct return code (see RETURN CODES) so the caller knows the kill did not take effect and may retry, e.g. with a stronger signal. --poll and --timeout share the same names and general purpose (periodic check, give-up bound) in both modes, but their meaning and defaults differ by mode: in launch mode they bound waiting for the remote command, in --kill mode they bound waiting for the signal to take effect.
+In `--kill` mode: maximum time to wait for the signaled process to die before giving up. Default: 5. On expiry, the process is left running (no escalation, e.g. to SIGKILL, is attempted) and remote state is left as-is (not cleaned up); tele exits with a distinct return code (see RETURN CODES) so the caller knows the kill did not take effect and may retry, e.g. with a stronger signal. --poll and --timeout share the same names and general purpose (periodic check, give-up bound) in both modes, but their meaning and defaults differ by mode: in launch mode they bound waiting for the remote command, in `--kill` mode they bound waiting for the signal to take effect.
 
 `--state-path PATH`  
 Remote path under which lock, status, PID, and output files are stored, default `~/.tele`.
 
 `--kill [SIGNAL]`  
-If a matching invocation (per IDENTITY) is currently running, send it SIGNAL (name or number, as accepted by `kill(1)`; default is SIGTERM as for `kill(1)`), sent to the remote command's process group so that child processes are reached as well. `tele` then polls (as per `--poll`) for the process to die, up to `--timeout`. If the process dies (whether from this signal or otherwise) within the timeout, remote state is cleaned up and `tele` exits 0. The invocation is now fully gone and a subsequent tele with the same identity starts fresh.  
-If the process is still alive when the timeout expires, no cleanup occurs and tele exits with a distinct return code (see RETURN CODES).  
-If matching state exists but no process is running (already dead, unreported), it is cleaned up directly, no signal needed, exit 0. If no matching state exists at all, this is a silent no-op, exit 0. Repeated `tele --kill` calls against the same invocation are therefore safe.
+Terminate any matching invocation (as per IDENTITY) and clean up remote state. SIGNAL is a name or number as accepted by kill(1); default is SIGTERM, matching kill(1)'s own default. See BEHAVIOR IN KILL MODE for the full behaviour.
 
-# BEHAVIOR ON INVOCATION
+## BEHAVIOR ON INVOCATION
 
 Given the computed identity hash, on each invocation `tele` checks remote state:
 
@@ -59,6 +57,19 @@ Given the computed identity hash, on each invocation `tele` checks remote state:
 2. Matching state exists and the process is confirmed live: Reattach, resuming polling at `--poll` interval, and resume streaming output (see OUTPUT below). Never starts a duplicate run, and no option overrides this.
 3. Matching state exists, process is not live, and completion has not yet been reported to any client: Report the stored exit code and output, then clean up remote state.
 4. Matching state exists and was already reported by a previous client: Cannot occur under normal single-client use, since state is cleaned up at the point of reporting . Concurrent `tele` clients against the same invocation are not a supported use case, but if `tele` is run concurrently against the same identity and finds state has disappeared mid-poll, it treats this as "completed and already reaped elsewhere," exits, and reports the command's exit status as unknown.
+
+## BEHAVIOR IN KILL MODE
+
+Given the computed identity, `tele --kill` checks remote state:
+
+1. No matching state exists. Nothing to do. Silent no-op, exit 0.
+2. Matching state exists, process is not live (already dead, unreported). No signal needed. Remote state is cleaned up directly, exit 0.
+3. Matching state exists and the process is live. SIGNAL is sent to the remote command's process group (not just the recorded PID, so child processes are reached too). `tele` then polls for the process to die, at `--poll` interval, up to `--timeout`:
+   - Dies within the timeout (whether from this signal or otherwise): Remote state is cleaned up, exit 0. The invocation is now fully gone; a subsequent tele with the same identity starts fresh.
+   - Still alive when timeout expires: No cleanup occurs, no escalation is attempted (e.g. to SIGKILL), and `tele` exits with a distinct return code (see RETURN CODES) so the caller knows the kill did not take effect and may retry, e.g. with a stronger signal.
+4. Matching state existed but was cleaned up by another client between the initial check and now: Treated the same as case 1, no-op, exit 0.
+
+Note repeated `tele --kill` calls against the same invocation are safe and idempotent.
 
 ## OUTPUT
 
