@@ -5,9 +5,10 @@
 ## SYNOPSIS
 
 ```shell
-tele [options] ssh_host -- command [cmd_options] [cmd_args]
-tele --kill [SIGNAL] ssh_host -- command [cmd_options] [cmd_args]
+tele [options] -- ssh_host command [cmd_options] [cmd_args]
+tele --kill [SIGNAL] -- ssh_host command [cmd_options] [cmd_args]
 ```
+TODO: is the -- in the right place?
 
 ## DESCRIPTION
 
@@ -17,7 +18,12 @@ If a matching invocation (see IDENTITY below) is already running remotely, tele 
 
 `tele` treats a **successful** completion (exit code `0`) as done: once observed, that result is retained and reported to every subsequent matching invocation instead of running the command again, until `--force` is passed. A **failed** completion (non-zero exit) is not retained this way — it is reported once, then cleaned up, so the next matching invocation simply runs the command again with no flag needed.
 
-`tele` requires an explicit `--` between its own options and the remote host/command, since remote `cmd_options` may themselves look like `tele` options and no attempt is made to disambiguate them positionally.
+command is run one of two ways, chosen automatically unless overridden:
+
+Exec mode (default whenever cmd_options or cmd_args are given, or when --exec is passed): command is executed directly on the remote host with the given cmd_options/cmd_args as its argument list — no shell is involved at any point. cmd_options and cmd_args are passed through as literal data, safely reconstructed as an argument list on the remote side (see MECHANICS); they can never be reinterpreted as shell syntax, regardless of their contents, because nothing on the remote end is parsing a string as syntax in the first place.
+Shell mode (default only when command is given alone, with no cmd_options/cmd_args, and --exec is not passed): command is handed, verbatim, to a remote shell (see --shell) to interpret — this is what allows shell operators (pipes, redirects, &&, ;) and remote globbing to work, by writing them directly into a single, locally pre-quoted command string, e.g. tele -- host 'cmd1 | cmd2'. This mirrors the same one-level quoting plain ssh itself already requires for the same purpose, and for the same reason: in this mode tele never re-parses or reinterprets command, it passes it through unmodified to the remote shell — the same shell-quoting responsibility already falls on the user with plain ssh, tele doesn't add to it.
+
+Caution: a bare command with no cmd_options/cmd_args defaults to shell mode. If command is constructed from untrusted or variable input rather than a fixed literal, pass --exec explicitly (or supply it via cmd_args to a wrapper) so it can never be interpreted as shell syntax.
 
 ## ARGUMENTS
 
@@ -25,11 +31,24 @@ If a matching invocation (see IDENTITY below) is already running remotely, tele 
 `command` - The remote command to run.
 `cmd_options`, `cmd_args` - Passed through to the remote command verbatim and unparsed by `tele`.
 
+How command is run depends if either of `cmd_options` are `cmd_args` are present:
+- Yes: `command` is executed directly without a shell. This means shell metacharacters can be safely used in these parameters without escaping.
+- No: By default `commmand` is run using a remote shell (see `--shell` option). This allows e.g. running a pipeline. To override this see `--exec` - note this is recommended if the command is constructed from untrusted or variable input rather than a fixed literal.
+
+Note `--` must be used to separate TODO: WHAT to disambiguate options for `tele` and the remote command.
+
+
 ## OPTIONS
+
+`--exec`  
+Run `command` directly rather than using a remote shell, even if `cmd_options` and `cmd_args` are not provided.
 
 `--poll SECONDS`
 In normal (launch/reattach) mode: interval between checks of remote command status while blocking or reattached. Default: 30.
 In `--kill` mode: interval between checks of whether the signaled process has died. Default: 1.
+
+`--shell [SHELL]`  
+Select the remote shell. Default is the remote account's configured login shell. Ignored if `cmd_options` and `cmd_args` are provided. Mutually exclusive with `--exec`.
 
 `--timeout [SECONDS]`
 In normal (launch/reattach) mode: maximum time tele will block waiting locally for the command to complete.
@@ -78,7 +97,7 @@ TODO: Can we simplify all the above to "No matching process is live: Clean up an
 
 ## OUTPUT
 
-Remote stdout/stderr are written to append-only log files on the remote host. Each `tele` client tracks, independently, how much of each log file it has already shown locally (as a byte offset), and on each poll reads and displays only new content past that offset - draining the log like a pipe that only yields unread bytes, with no daemon or client/server protocol required; all coordination is file-based.
+Remote stdout/stderr are written to append-only log files on the remote host. Each tele client tracks, independently, how much of each log file it has already shown locally (as a byte offset), and on each poll reads and displays only new content past that offset — draining the log like a pipe that only yields unread bytes, with no daemon or client/server protocol required; all coordination is file-based. On any client draining output logs to EOF, the remote logs are deleted.
 
 When reporting a retained successful completion (BEHAVIOR ON INVOCATION, case 3), `tele` instead prints a short status summary.
 
