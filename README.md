@@ -7,28 +7,25 @@
 Run or reconnect to a shell command:
 
 ```shell
-tele [options] -- ssh_host command
+tele [options] ssh_host -- command
 ```
 
 Run or reconnect to a local shell script:
 ```shell
-tele [options] -- ssh_host path
+tele [options] ssh_host -- path
 ```
 
 Run or reconnect to a directly-executed command (no shell is invoked). The first form requires at least one of cmd_options or cmd_args:
 ```shell
-tele [options] -- ssh_host command [cmd_options] [cmd_args]
-tele [options] --exec -- ssh_host command
+tele [options] ssh_host -- command [cmd_options] [cmd_args]
+tele [options] --exec ssh_host -- command
 ```
 
-Ensure a command is terminated and clean up:
+Ensure a command is terminated and cleaned up:
 
 ```shell
 tele --kill [SIGNAL] -- ssh_host command [cmd_options] [cmd_args]
 ```
-TODO: is the -- in the right place?
-
-See examples. TODO
 
 ## DESCRIPTION
 
@@ -78,10 +75,11 @@ Ensure no matching invocation (as per IDENTITY) is running, and clean up remote 
 
 ## IDENTITY
 
-Two invocations are considered "the same" if `command`, `cmd_options` and `cmd_args`, as received by `tele` after any local shell expansion, are identical. `ssh_host` is not part of the identity; state lives on the remote host itself, so identity is scoped per-host implicitly.
+Two invocations are considered "the same" if `command`, `cmd_options` and `cmd_args` (if present), as received by `tele` after any local shell expansion, are identical. Note state lives on the remote host so identity is per-host.
 
 ## BEHAVIOR ON INVOCATION
 
+TODO: see if we can simplify wording here.
 Given the identity of the requested invocation, on each invocation `tele` checks remote state:
 
 1. **No matching state exists.** Start a new run. The remote side records the command, a PID, and a time marker to guard against false positives from PID reuse after a reboot, and begins writing stdout/stderr to log files.
