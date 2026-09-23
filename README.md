@@ -24,7 +24,7 @@ tele [options] --exec ssh_host -- command
 Ensure a command is terminated and cleaned up:
 
 ```shell
-tele --kill [SIGNAL] -- ssh_host command [cmd_options] [cmd_args]
+tele --kill [SIGNAL]ssh_host -- command [cmd_options] [cmd_args]
 ```
 
 ## DESCRIPTION
@@ -105,7 +105,7 @@ TODO: Can we simplify all the above to "No matching process is live: Clean up an
 
 Remote stdout/stderr are written to append-only log files on the remote host. Each tele client tracks, independently, how much of each log file it has already shown locally (as a byte offset), and on each poll reads and displays only new content past that offset — draining the log like a pipe that only yields unread bytes, with no daemon or client/server protocol required; all coordination is file-based. On any client draining output logs to EOF, the remote logs are deleted.
 
-When reporting a retained successful completion (BEHAVIOR ON INVOCATION, case 3), `tele` instead prints a short status summary.
+When reattaching to a previously successful invocation, any umstreamed output is provided. TODO: add a -v mode to get metadata on time etc, not by default so output is "the same" if interrupted.
 
 ## PRIVILEGE ESCALATION
 
