@@ -4,36 +4,45 @@
 
 ## SYNOPSIS
 
+Run or reconnect to a shell command:
+
+```shell
+tele [options] -- ssh_host command
+```
+
+Run or reconnect to a local shell script:
+```shell
+tele [options] -- ssh_host path
+```
+
+Run or reconnect to a directly-executed command (no shell is invoked). The first form requires at least one of cmd_options or cmd_args:
 ```shell
 tele [options] -- ssh_host command [cmd_options] [cmd_args]
+tele [options] --exec -- ssh_host command
+```
+
+Ensure a command is terminated and clean up:
+
+```shell
 tele --kill [SIGNAL] -- ssh_host command [cmd_options] [cmd_args]
 ```
 TODO: is the -- in the right place?
 
+See examples. TODO
+
 ## DESCRIPTION
 
-`tele` runs `command` on a remote host `ssh_host` via SSH, detached from the local session so that it keeps running if tele is killed, the network drops, or the local machine sleeps. By default `tele` blocks, streaming the remote command's stdout/stderr locally, until the command finishes, and then exits with the command's own return code.
+`tele` runs `command` (with options and arguments, if passed) on a remote host `ssh_host` via SSH, detached from the local session so that it keeps running if tele is killed, the network drops, or the local machine sleeps. By default `tele` blocks, streaming the remote command's stdout/stderr locally, until the command finishes, and then exits with the command's own return code.
 
-If a matching invocation (see IDENTITY below) is already running remotely, tele does not start a second copy. Instead it reattaches: it resumes polling and streaming output from the in-progress run.
+Rerunning `tele` with a matching `command`, `cmd_options` and `cmd_args` (if relevant) will not by default re-run an invocation if it was successful, i.e. the remote comamnd had a return code of `0`. If the remote command is still running, it will reattach to that command to resume polling and streaming output. If the remote command completed successfully while `tele` was not attached, it will return any unstreamed output and the status code. However if the command failed, rerunning `tele` will retry the command. A successful command can be re-run using the `--force` option.
 
-`tele` treats a **successful** completion (exit code `0`) as done: once observed, that result is retained and reported to every subsequent matching invocation instead of running the command again, until `--force` is passed. A **failed** completion (non-zero exit) is not retained this way — it is reported once, then cleaned up, so the next matching invocation simply runs the command again with no flag needed.
-
-command is run one of two ways, chosen automatically unless overridden:
-
-Exec mode (default whenever cmd_options or cmd_args are given, or when --exec is passed): command is executed directly on the remote host with the given cmd_options/cmd_args as its argument list — no shell is involved at any point. cmd_options and cmd_args are passed through as literal data, safely reconstructed as an argument list on the remote side (see MECHANICS); they can never be reinterpreted as shell syntax, regardless of their contents, because nothing on the remote end is parsing a string as syntax in the first place.
-Shell mode (default only when command is given alone, with no cmd_options/cmd_args, and --exec is not passed): command is handed, verbatim, to a remote shell (see --shell) to interpret — this is what allows shell operators (pipes, redirects, &&, ;) and remote globbing to work, by writing them directly into a single, locally pre-quoted command string, e.g. tele -- host 'cmd1 | cmd2'. This mirrors the same one-level quoting plain ssh itself already requires for the same purpose, and for the same reason: in this mode tele never re-parses or reinterprets command, it passes it through unmodified to the remote shell — the same shell-quoting responsibility already falls on the user with plain ssh, tele doesn't add to it.
-
-Caution: a bare command with no cmd_options/cmd_args defaults to shell mode. If command is constructed from untrusted or variable input rather than a fixed literal, pass --exec explicitly (or supply it via cmd_args to a wrapper) so it can never be interpreted as shell syntax.
+Caution: If `command` is a bare command not a shell string, with no arguments or options, and is constructed from untrusted input, use the `--exec` option to avoid shell injection attacks.
 
 ## ARGUMENTS
 
 `ssh_host` - SSH target as `user@host`, optionally with a port via standard SSH syntax, or a Host entry from SSH configuration.
-`command` - The remote command to run.
+`command` - The remote command to run, or, in shell mode, a path to a script file to run remotely.
 `cmd_options`, `cmd_args` - Passed through to the remote command verbatim and unparsed by `tele`.
-
-How command is run depends if either of `cmd_options` are `cmd_args` are present:
-- Yes: `command` is executed directly without a shell. This means shell metacharacters can be safely used in these parameters without escaping.
-- No: By default `commmand` is run using a remote shell (see `--shell` option). This allows e.g. running a pipeline. To override this see `--exec` - note this is recommended if the command is constructed from untrusted or variable input rather than a fixed literal.
 
 Note `--` must be used to separate TODO: WHAT to disambiguate options for `tele` and the remote command.
 
@@ -48,22 +57,21 @@ In normal (launch/reattach) mode: interval between checks of remote command stat
 In `--kill` mode: interval between checks of whether the signaled process has died. Default: 1.
 
 `--shell [SHELL]`  
-Select the remote shell. Default is the remote account's configured login shell. Ignored if `cmd_options` and `cmd_args` are provided. Mutually exclusive with `--exec`.
+Select the remote shell. Default is the remote account's configured login shell. Ignored if `cmd_options` and `cmd_args` are provided, mutually exclusive with `--exec`.
 
-`--timeout [SECONDS]`
+`--timeout [SECONDS]`  
 In normal (launch/reattach) mode: maximum time tele will block waiting locally for the command to complete.
 - SECONDS < 0: Block indefinitely, no limit. This is the default.
 - SECONDS == 0: Return immediately the remote launch succeeds.
 - SECONDS > 0: Block up to that many seconds. On expiry, tele exits with a distinct return code (see RETURN CODES) and leaves the remote command running, with no clean up. A later tele invocation with the same identity will reattach or collect the result as normal.
 
-In --kill mode: maximum time to wait for the signaled process to die before giving up, with the same <0 / 0 / >0 meanings as above. Default: 5. On expiry, tele exits with a distinct return code (see RETURN CODES) so the caller knows the kill did not take effect and may retry, e.g. with a stronger signal.
-
+In `--kill` mode: maximum time to wait for the signaled process to die before giving up, with the same <0 / 0 / >0 meanings as above. Default: 5. On expiry, tele exits with a distinct return code (see RETURN CODES) so the caller knows the kill did not take effect and may retry, e.g. with a stronger signal.
 
 `--force`
-Ignore any retained successful-completion record for a matching invocation and run the command again. Note if a matching invocation is running, this has no effect - tele always reattaches.
+Ignore any previous successful run and reun the command. Note if a matching invocation is running, this has no effect - tele always reattaches.
 
 `--state-path PATH`
-Remote path under which lock, status, PID, and output files are stored. Default `$TMPDIR/$USER/tele`. Note `tele` does not clean up state for successful invocations.
+Remote path under which remote state and output files are stored. Default `$TMPDIR/$USER/tele`. Note `tele` does not clean up state for successful invocations.
 
 `--kill [SIGNAL]`
 Ensure no matching invocation (as per IDENTITY) is running, and clean up remote state. SIGNAL is a name or number as accepted by kill(1); default is SIGTERM, matching kill(1)'s own default. See BEHAVIOR IN KILL MODE for the full behaviour.
