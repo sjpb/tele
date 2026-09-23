@@ -31,12 +31,17 @@ If a matching invocation (see IDENTITY below) is already running remotely, tele 
 In normal (launch/reattach) mode: interval between checks of remote command status while blocking or reattached. Default: 30.
 In `--kill` mode: interval between checks of whether the signaled process has died. Default: 1.
 
-`--timeout SECONDS`
-In normal (launch/reattach) mode: maximum time tele will block waiting locally for the command to complete. Default: 0 (no timeout — block indefinitely). On expiry, tele exits with a distinct return code (see RETURN CODES) and leaves the remote command running, untouched — the same state --async would leave it in (see FUTURE WORK). No cleanup occurs; a later tele invocation with the same identity will reattach or collect the result as normal.
-In --kill mode: maximum time to wait for the signaled process to die before giving up. Default: 5. On expiry, the process is left running (no escalation, e.g. to SIGKILL, is attempted) and remote state is left as-is (not cleaned up); tele exits with a distinct return code (see RETURN CODES) so the caller knows the kill did not take effect and may retry, e.g. with a stronger signal. --poll and --timeout share the same names and general purpose (periodic check, give-up bound) in both modes, but their meaning and defaults differ by mode: in launch mode they bound waiting for the remote command, in --kill mode they bound waiting for the signal to take effect.
+`--timeout [SECONDS]`
+In normal (launch/reattach) mode: maximum time tele will block waiting locally for the command to complete.
+- SECONDS < 0: Block indefinitely, no limit. This is the default.
+- SECONDS == 0: Return immediately the remote launch succeeds.
+- SECONDS > 0: Block up to that many seconds. On expiry, tele exits with a distinct return code (see RETURN CODES) and leaves the remote command running, with no clean up. A later tele invocation with the same identity will reattach or collect the result as normal.
+
+In --kill mode: maximum time to wait for the signaled process to die before giving up, with the same <0 / 0 / >0 meanings as above. Default: 5. On expiry, tele exits with a distinct return code (see RETURN CODES) so the caller knows the kill did not take effect and may retry, e.g. with a stronger signal.
+
 
 `--force`
-Disregard any retained successful-completion record for a matching invocation and run the command again. Never overrides a matching invocation that is currently running — reattach always takes precedence, with no way to override it. Has no effect if the last matching outcome was a failure or there is no matching state, since neither of those is retained in the first place.
+Ignore any retained successful-completion record for a matching invocation and run the command again. Note if a matching invocation is running, this has no effect - tele always reattaches.
 
 `--state-path PATH`
 Remote path under which lock, status, PID, and output files are stored. Default `$TMPDIR/$USER/tele`. Note `tele` does not clean up state for successful invocations.
@@ -85,7 +90,12 @@ Commands requiring interactive privilege elevation (e.g. sudo prompting for a pa
 
 On normal completion, the remote command's own exit code is returned unchanged.
 
-Distinct non-negative `tele`-level codes (analogous to ssh's own exit code conventions) are reserved for: inability to reach the host, failure to establish or confirm the remote run, `--timeout` expiry (both modes), and detection of corrupted/unreadable remote state. Exact code assignments TBD.
+Distinct non-negative tele-level codes (analogous to ssh's own exit code conventions) are reserved for:
+- Inability to reach the host (SSH-level failure - always reported, regardless of --timeout), failure to establish the remote run itself (e.g. state directory unwritable, remote script rejected — always confirmed and reported before returning, even under --timeout 0)
+- `--timeout N` expiry in normal mode
+- `--timeout N` expiry in kill mode
+- `--timeout 0` returning by design with no result yet available ("launched/reattached, not waited"). This is distinct from timeout expiry
+- Detection of corrupted/unreadable remote state.
 
 ## SIGNAL HANDLING
 
