@@ -24,7 +24,7 @@ tele [options] --exec ssh_host -- command
 Ensure a command is terminated and cleaned up:
 
 ```shell
-tele --kill [SIGNAL]ssh_host -- command [cmd_options] [cmd_args]
+tele --kill [SIGNAL] ssh_host -- command [cmd_options] [cmd_args]
 ```
 
 ## DESCRIPTION
