@@ -24,7 +24,7 @@ tele [options] --exec ssh_host -- command
 Ensure a command is terminated and cleaned up:
 
 ```shell
-tele --kill [SIGNAL] ssh_host -- command [cmd_options] [cmd_args]
+tele --kill --signal SIGNAL ssh_host -- command [cmd_options] [cmd_args]
 ```
 
 ## DESCRIPTION
@@ -49,12 +49,24 @@ Note `--` must be used to separate TODO: WHAT to disambiguate options for `tele`
 `--exec`  
 Run `command` directly rather than using a remote shell, even if `cmd_options` and `cmd_args` are not provided.
 
+`--force`  
+Ignore any previous successful run and reun the command. Note if a matching invocation is running, this has no effect - tele always reattaches.
+
+`--kill`  
+Ensure no matching invocation (as per IDENTITY) is running by sending a signal if required (see `--signal`), and clean up remote state. See BEHAVIOR IN KILL MODE for the full behaviour.
+
 `--poll SECONDS`
 In normal (launch/reattach) mode: interval between checks of remote command status while blocking or reattached. Default: 30.
 In `--kill` mode: interval between checks of whether the signaled process has died. Default: 1.
 
 `--shell [SHELL]`  
 Select the remote shell. Default is the remote account's configured login shell. Ignored if `cmd_options` and `cmd_args` are provided, mutually exclusive with `--exec`.
+
+`--signal SIGNAL`  
+The name or number as accepted by kill(1); default is SIGTERM, matching kill(1)'s own default.
+
+`--state-path PATH`  
+Remote path under which remote state and output files are stored. Default `$TMPDIR/$USER/tele`. Note `tele` does not clean up state for successful invocations.
 
 `--timeout [SECONDS]`  
 In normal (launch/reattach) mode: maximum time tele will block waiting locally for the command to complete.
@@ -63,15 +75,6 @@ In normal (launch/reattach) mode: maximum time tele will block waiting locally f
 - SECONDS > 0: Block up to that many seconds. On expiry, tele exits with a distinct return code (see RETURN CODES) and leaves the remote command running, with no clean up. A later tele invocation with the same identity will reattach or collect the result as normal.
 
 In `--kill` mode: maximum time to wait for the signaled process to die before giving up, with the same <0 / 0 / >0 meanings as above. Default: 5. On expiry, tele exits with a distinct return code (see RETURN CODES) so the caller knows the kill did not take effect and may retry, e.g. with a stronger signal.
-
-`--force`
-Ignore any previous successful run and reun the command. Note if a matching invocation is running, this has no effect - tele always reattaches.
-
-`--state-path PATH`
-Remote path under which remote state and output files are stored. Default `$TMPDIR/$USER/tele`. Note `tele` does not clean up state for successful invocations.
-
-`--kill [SIGNAL]`
-Ensure no matching invocation (as per IDENTITY) is running, and clean up remote state. SIGNAL is a name or number as accepted by kill(1); default is SIGTERM, matching kill(1)'s own default. See BEHAVIOR IN KILL MODE for the full behaviour.
 
 ## IDENTITY
 
